@@ -1,0 +1,28 @@
+[
+  {
+    "jackpotId": "J1-FIXED",
+    "poolAmount": 1000.0,
+    "initialAmount": 1000.0,
+    "contributionStrategyType": "FIXED",
+    "rewardStrategyType": "FIXED",
+    "fixedContributionPercent": 0.05,
+    "variableContributionStartPercent": null,
+    "variableContributionMinPercent": null,
+    "variableContributionDecayPool": null,
+    "fixedRewardChance": 0.1,
+    "fixedRewardPayoutPercent": 0.8,
+    "variableRewardPoolToMaxChance": null
+  },
+  {
+    "jackpotId": "J2-VARIABLE",
+    "poolAmount": 1000.0,
+    "initialAmount": 1000.0,
+    "contributionStrategyType": "VARIABLE",
+    "rewardStrategyType": "VARIABLE",
+    "variableContributionStartPercent": 0.10,
+    "variableContributionMinPercent": 0.02,
+    "variableContributionDecayPool": 2000.0,
+    "fixedRewardChance": 0.05,
+    "variableRewardPoolToMaxChance": 5000.0
+  }
+]

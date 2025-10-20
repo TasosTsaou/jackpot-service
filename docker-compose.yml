@@ -1,0 +1,49 @@
+services:
+  app:
+    container_name: jackpot-service # Friendly name for easier docker commands
+    build: . # Use Dockerfile in project root to build the Spring Boot app
+    ports:
+      - "8080:8080" # Expose application port 8080 to host
+    depends_on:
+      kafka:
+        condition: service_healthy # Wait for Kafka healthcheck before starting app
+      redis:
+        condition: service_healthy # Wait for Redis healthcheck before starting app
+    environment:
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 # Point Spring to Kafka broker
+      - SPRING_REDIS_HOST=redis # Point Spring to Redis host
+
+  kafka:
+    image: apache/kafka:3.7.0 # Official Apache Kafka image (KRaft capable)
+    container_name: kafka # Friendly name for easier docker commands
+    ports:
+      - "9092:9092" # Expose Kafka client port to host
+    environment:
+      - KAFKA_PROCESS_ROLES=broker,controller # Run both broker and controller roles (KRaft)
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:29093 # Define controller quorum voters
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:29093 # Listener bindings for client/controller traffic
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 # Hostname advertised to clients within the network
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT # Protocol mapping per listener
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER # Listener name for controller communication
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true # Allow auto-topic creation for dev/testing
+      - KAFKA_LOG_DIRS=/tmp/kraft-combined-logs # Location for combined log storage (ephemeral)
+      - KAFKA_NODE_ID=1 # Unique node ID for the broker
+      - CLUSTER_ID=abcdefghijklmnopqrstuv # Static cluster ID to auto-format KRaft storage
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"] # Simple broker readiness probe
+      interval: 10s # Time between health checks
+      timeout: 5s # Wait time before considering check failed
+      retries: 10 # Number of failures before marking container unhealthy
+
+  redis:
+    image: redis:7 # Lightweight Redis server image
+    container_name: redis # Friendly name for Redis container
+    ports:
+      - "6379:6379" # Expose Redis port to host
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"] # Ping command to ensure Redis is ready
+      interval: 10s # Time between health checks
+      timeout: 5s # Wait time before a check is considered failed
+      retries: 5 # Number of failures before container marked unhealthy
+
+volumes: {} # No named volumes needed for ephemeral testing
