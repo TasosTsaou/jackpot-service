@@ -2,6 +2,8 @@ package com.example.jackpot.strategy.reward;
 
 import com.example.jackpot.config.RewardStrategyProperties;
 import com.example.jackpot.model.Jackpot;
+import com.example.jackpot.model.enums.RewardStrategyType;
+import com.example.jackpot.strategy.annotations.RewardType;
 import com.example.jackpot.strategy.random.RandomGenerator;
 import org.springframework.stereotype.Component;
 
@@ -9,6 +11,7 @@ import org.springframework.stereotype.Component;
  * Implements a variable reward scheme where the chance to win grows with the pool size until it
  * reaches certainty. Externalized configuration and random generation enable flexible tuning.
  */
+@RewardType(RewardStrategyType.VARIABLE)
 @Component
 public class VariableRewardStrategy implements RewardStrategy {
 

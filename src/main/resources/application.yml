@@ -14,6 +14,8 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    admin:
+      auto-create: true
 
   redis:
     host: redis
@@ -30,3 +32,9 @@ reward:
     variable:
       default-pool-to-max-chance: 1000000.0
       default-base-win-probability: 0.0
+
+app:
+  kafka:
+    topic-name: jackpot-bets
+    partitions: 12
+    concurrency: 1

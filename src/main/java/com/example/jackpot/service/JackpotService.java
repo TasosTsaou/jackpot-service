@@ -5,9 +5,12 @@ import com.example.jackpot.model.enums.ContributionStrategyType;
 import com.example.jackpot.port.ContributionSink;
 import com.example.jackpot.port.JackpotQuery;
 import com.example.jackpot.port.JackpotStore;
+import com.example.jackpot.port.BetProcessingGate;
+import com.example.jackpot.port.JackpotPool;
 import com.example.jackpot.strategy.contribution.ContributionStrategy;
-import com.example.jackpot.strategy.contribution.FixedContributionStrategy;
-import com.example.jackpot.strategy.contribution.VariableContributionStrategy;
+import com.example.jackpot.strategy.registry.ContributionStrategyRegistry;
+import com.example.jackpot.repository.RedisRepository;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -22,25 +25,36 @@ public class JackpotService {
     private final JackpotQuery jackpotQuery;
     private final JackpotStore jackpotStore;
     private final ContributionSink contributionSink;
-    private final FixedContributionStrategy fixedContribution;
-    private final VariableContributionStrategy variableContribution;
+    private final ContributionStrategyRegistry contributionRegistry;
+    private final BetProcessingGate processingGate;
+    private final JackpotPool jackpotPool;
 
     public JackpotService(JackpotQuery jackpotQuery,
                           JackpotStore jackpotStore,
                           ContributionSink contributionSink,
-                          FixedContributionStrategy fixedContribution,
-                          VariableContributionStrategy variableContribution) {
+                          ContributionStrategyRegistry contributionRegistry,
+                          BetProcessingGate processingGate,
+                          JackpotPool jackpotPool) {
         this.jackpotQuery = jackpotQuery;
         this.jackpotStore = jackpotStore;
         this.contributionSink = contributionSink;
-        this.fixedContribution = fixedContribution;
-        this.variableContribution = variableContribution;
+        this.contributionRegistry = contributionRegistry;
+        this.processingGate = processingGate;
+        this.jackpotPool = jackpotPool;
     }
 
     /**
      * Called when a bet is consumed from Kafka.
      */
     public void processBet(Bet bet) {
+        // Skip if already processed; otherwise acquire short-lived processing lock to avoid races
+        if (processingGate.isBetProcessed(bet.getBetId())) {
+            return;
+        }
+        if (!processingGate.tryAcquireProcessing(bet.getBetId(), java.time.Duration.ofSeconds(10))) {
+            return;
+        }
+
         Optional<Jackpot> jackpotOpt = jackpotQuery.findJackpotById(bet.getJackpotId());
         if (jackpotOpt.isEmpty()) {
             System.out.println("Jackpot not found for id=" + bet.getJackpotId());
@@ -48,10 +62,10 @@ public class JackpotService {
         }
 
         Jackpot jackpot = jackpotOpt.get();
-        ContributionStrategy strategy = selectStrategy(jackpot.getContributionStrategyType());
+        ContributionStrategy strategy = contributionRegistry.get(jackpot.getContributionStrategyType());
         double contribution = strategy.calculateContribution(jackpot, bet.getBetAmount());
 
-        double newPool = jackpot.getPoolAmount() + contribution;
+        double newPool = jackpotPool.incrementPool(jackpot.getJackpotId(), contribution);
         jackpot.setPoolAmount(newPool);
 
         // Persist updates
@@ -67,17 +81,10 @@ public class JackpotService {
                 .build();
 
         contributionSink.appendContribution(record);
+
+        // Mark bet as processed only after successful side effects
+        processingGate.markBetProcessed(bet.getBetId());
     }
 
-    private ContributionStrategy selectStrategy(ContributionStrategyType type) {
-        return switch (type) {
-            case VARIABLE -> variableContribution;
-            case FIXED -> fixedContribution;
-        };
-    }
+    // Strategy selection now delegated to ContributionStrategyRegistry
 }
-
-
-
-
-

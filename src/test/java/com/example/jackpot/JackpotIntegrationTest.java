@@ -39,6 +39,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         BetService.class,
         JackpotService.class,
         RewardService.class,
+        com.example.jackpot.strategy.registry.ContributionStrategyRegistry.class,
+        com.example.jackpot.strategy.registry.RewardStrategyRegistry.class,
         FixedContributionStrategy.class,
         VariableContributionStrategy.class,
         FixedRewardStrategy.class,
@@ -81,6 +83,39 @@ class JackpotIntegrationTest {
         @Bean
         @Primary
         RandomGenerator randomGenerator() { return () -> 0.0; }
+
+        @Bean
+        @Primary
+        BetProcessingGate betProcessingGate() {
+            return new BetProcessingGate() {
+                @Override public boolean isBetProcessed(String betId) { return false; }
+                @Override public boolean tryAcquireProcessing(String betId, java.time.Duration ttl) { return true; }
+                @Override public void markBetProcessed(String betId) { }
+            };
+        }
+
+        @Bean
+        @Primary
+        JackpotPool jackpotPool(JackpotStore store) {
+            return (jackpotId, delta) -> {
+                InMemoryJackpotStore ims = (InMemoryJackpotStore) store;
+                Jackpot j = ims.findById(jackpotId).orElseThrow();
+                j.setPoolAmount(j.getPoolAmount() + delta);
+                ims.saveJackpot(j);
+                return j.getPoolAmount();
+            };
+        }
+
+        @Bean
+        @Primary
+        RewardEvaluationGate rewardEvaluationGate() {
+            return new RewardEvaluationGate() {
+                private final java.util.Map<String, Reward> map = new java.util.HashMap<>();
+                @Override public java.util.Optional<Reward> findRewardByBetId(String betId) { return java.util.Optional.ofNullable(map.get(betId)); }
+                @Override public void saveRewardByBetId(Reward reward) { map.put(reward.getBetId(), reward); }
+                @Override public boolean tryAcquireRewardLock(String betId, java.time.Duration ttl) { return true; }
+            };
+        }
     }
 
     // --- In-memory implementations ---
@@ -151,7 +186,7 @@ class JackpotIntegrationTest {
         assertThat(reward.getCreatedAt()).isNotNull();
         assertThat(reward.getJackpotRewardAmount()).isGreaterThan(0.0);
 
-        // Step 4: Pool resets to initial value after win
+        // Pool resets to initial value after win
         Jackpot jackpot = ((InMemoryJackpotStore) jackpotStore).findById("J1").orElseThrow();
         assertThat(jackpot.getPoolAmount()).isEqualTo(1000.0);
     }

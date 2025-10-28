@@ -13,6 +13,9 @@ import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.springframework.kafka.config.TopicBuilder;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.springframework.kafka.transaction.KafkaTransactionManager;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,6 +30,12 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
+    @Value("${app.kafka.topic-name:jackpot-bets}")
+    private String topicName;
+
+    @Value("${app.kafka.partitions:12}")
+    private int topicPartitions;
+
     // --- Producer (Bet) ---
     @Bean
     public ProducerFactory<String, Bet> betProducerFactory() {
@@ -37,7 +46,15 @@ public class KafkaConfig {
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
         // Avoid adding type headers for cross-language compatibility if needed
         props.put(JsonSerializer.ADD_TYPE_INFO_HEADERS, false);
-        return new DefaultKafkaProducerFactory<>(props);
+        // Enable idempotence and prepare for transactions
+        props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+        props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);
+        props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5);
+
+        DefaultKafkaProducerFactory<String, Bet> factory = new DefaultKafkaProducerFactory<>(props);
+        // Setting a prefix enables Spring to allocate per-thread transactional producers
+        factory.setTransactionIdPrefix("bet-tx-");
+        return factory;
     }
 
     @Bean
@@ -60,17 +77,39 @@ public class KafkaConfig {
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+        // Ensure downstream consumers only see committed transactional data
+        props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
 
         return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), jsonDeserializer);
     }
 
+    // --- Transactions ---
+    @Bean
+    public KafkaTransactionManager<String, Bet> kafkaTransactionManager(ProducerFactory<String, Bet> pf) {
+        return new KafkaTransactionManager<>(pf);
+    }
+
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, Bet> betKafkaListenerContainerFactory(
-            ConsumerFactory<String, Bet> betConsumerFactory) {
+            ConsumerFactory<String, Bet> betConsumerFactory,
+            KafkaTransactionManager<String, Bet> kafkaTransactionManager,
+            @Value("${app.kafka.concurrency:1}") int concurrency) {
         ConcurrentKafkaListenerContainerFactory<String, Bet> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(betConsumerFactory);
-        factory.setConcurrency(1); // dev-friendly; increase for throughput
+        factory.setConcurrency(concurrency); // tune based on partitions and instances
+        // Bind the listener container to Kafka transactions so produced records and offset commits are atomic
+        factory.getContainerProperties().setTransactionManager(kafkaTransactionManager);
         return factory;
+    }
+
+    // --- Topic management ---
+    @Bean
+    public NewTopic jackpotTopic() {
+        return TopicBuilder
+                .name(topicName)
+                .partitions(topicPartitions)
+                .replicas(1)
+                .build();
     }
 }

@@ -2,6 +2,8 @@ package com.example.jackpot.strategy.reward;
 
 import com.example.jackpot.config.RewardStrategyProperties;
 import com.example.jackpot.model.Jackpot;
+import com.example.jackpot.model.enums.RewardStrategyType;
+import com.example.jackpot.strategy.annotations.RewardType;
 import com.example.jackpot.strategy.random.RandomGenerator;
 import org.springframework.stereotype.Component;
 
@@ -10,6 +12,7 @@ import org.springframework.stereotype.Component;
  * represent a configurable percentage of the current jackpot pool. Configuration and randomness
  * are injected to respect dependency inversion and keep the strategy open to extension.
  */
+@RewardType(RewardStrategyType.FIXED)
 @Component
 public class FixedRewardStrategy implements RewardStrategy {
 

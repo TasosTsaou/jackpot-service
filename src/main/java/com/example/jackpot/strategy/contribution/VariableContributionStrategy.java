@@ -1,12 +1,15 @@
 package com.example.jackpot.strategy.contribution;
 
 import com.example.jackpot.model.Jackpot;
+import com.example.jackpot.model.enums.ContributionStrategyType;
+import com.example.jackpot.strategy.annotations.ContributionType;
 import org.springframework.stereotype.Component;
 
 /**
  * Calculates a contribution that decreases from a starting percentage towards a
  * minimum as the jackpot pool grows.
  */
+@ContributionType(ContributionStrategyType.VARIABLE)
 @Component
 public class VariableContributionStrategy implements ContributionStrategy {
     private static final double DEFAULT_START_PERCENT = 0.10;

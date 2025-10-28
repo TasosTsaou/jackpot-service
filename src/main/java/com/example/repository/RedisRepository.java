@@ -57,6 +57,12 @@ public class RedisRepository {
         return "jackpot:reward:" + id;
     }
 
+    // --- Key helpers for idempotency and reward-by-bet storage ---
+    private String processedBetKey(String id) { return "processed:bet:" + id; }
+    private String rewardByBetKey(String id) { return "reward:bybet:" + id; }
+    private String rewardLockKey(String id) { return "lock:reward:" + id; }
+    private String betProcessingLockKey(String id) { return "lock:betproc:" + id; }
+
     // --- Bets ---
     /**
      * Persists a bet event so that reward evaluation can reference it later.
@@ -155,5 +161,58 @@ public class RedisRepository {
     public void appendReward(Reward reward) {
         reward.setCreatedAt(Instant.now());
         redis.opsForList().leftPush(rewardListKey(reward.getJackpotId()), reward);
+    }
+
+    // --- Idempotency helpers ---
+    /**
+     * Marks a bet as processed using SETNX with an expiration. Returns true only for the first
+     * caller that marks the bet, false for subsequent calls until the TTL elapses.
+     */
+    public boolean markBetProcessed(String betId) {
+        return Boolean.TRUE.equals(
+                redis.opsForValue().setIfAbsent(processedBetKey(betId), 1, java.time.Duration.ofHours(72))
+        );
+    }
+
+    /**
+     * Checks whether a bet has already been marked as processed.
+     */
+    public boolean isBetProcessed(String betId) {
+        Boolean exists = redis.hasKey(processedBetKey(betId));
+        return exists != null && exists;
+    }
+
+    /**
+     * Attempts to acquire a short-lived lock for reward evaluation of a bet.
+     * Returns true if acquired, false if another evaluator holds the lock.
+     */
+    public boolean tryAcquireRewardLock(String betId, String holderId, java.time.Duration ttl) {
+        return Boolean.TRUE.equals(
+                redis.opsForValue().setIfAbsent(rewardLockKey(betId), holderId, ttl)
+        );
+    }
+
+    /**
+     * Attempts to acquire a short-lived lock for bet processing.
+     */
+    public boolean tryAcquireBetProcessing(String betId, String holderId, java.time.Duration ttl) {
+        return Boolean.TRUE.equals(
+                redis.opsForValue().setIfAbsent(betProcessingLockKey(betId), holderId, ttl)
+        );
+    }
+
+    /**
+     * Persists a reward record under the bet id for idempotent retrieval.
+     */
+    public void saveRewardByBetId(Reward reward) {
+        redis.opsForHash().put(rewardByBetKey(reward.getBetId()), "data", reward);
+    }
+
+    /**
+     * Retrieves a reward previously stored by bet id.
+     */
+    public Optional<Reward> findRewardByBetId(String betId) {
+        Object data = redis.opsForHash().get(rewardByBetKey(betId), "data");
+        return data instanceof Reward ? Optional.of((Reward) data) : Optional.empty();
     }
 }

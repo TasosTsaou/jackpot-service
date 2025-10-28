@@ -158,6 +158,11 @@ package "Adapters (Infra)" {
 
 - CQRS‑Lite Read/Write Split (ADR 0002)
   - Goal: Separate read (`*Query`) and write (`*Store`) concerns. Not advised for prototypes, used here only for demo purposes.
+
+---
+
+## See Also
+- Decoupling strategy selection from services: `docs/decouple-strategies-from-services.md`
   - Pros: Independent permissions/access patterns/configuration/error handling/optimization/scaling; easy caches/projections.
   - Cons: Slight duplication when using same backend; mental overhead.
 
