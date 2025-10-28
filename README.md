@@ -74,9 +74,9 @@ If you have `make` available, these shortcuts wrap common workflows:
 make test              # run unit & integration tests
 make up                # build and start stack
 make demo              # run smoke test against running stack
-make demo-standalone   # bring up, test, and tear down automatically
 make logs              # follow service logs
 make down              # stop and remove volumes
+make openapi-export    # write docs/api/openapi.json from a running app
 ```
 
 ---
@@ -176,6 +176,16 @@ Execute the unit and integration tests locally with:
 ./gradlew test
 ```
 
+### Terminal reporting
+- Per-test events are printed in the console (passed, skipped, failed).
+- Failures show full stack traces and causes.
+- A final one-line summary is printed, for example:
+  - `Test Summary: SUCCESS | Total: 42, Passed: 42, Failed: 0, Skipped: 0`
+
+### HTML report
+- Full report: `build/reports/tests/test/index.html`
+- Class-specific pages live under `build/reports/tests/test/classes/`
+
 
 ## API Docs
 
@@ -196,6 +206,8 @@ defaults to tweak baseline behavior without code changes.
 The fixed and variable reward strategies inject these settings plus a pluggable random source, keeping the implementations aligned with SOLID principles.
 
 Redis serialization registers Jackson's Java Time module so `Instant` fields persist correctly; if you supply a custom `RedisTemplate`, ensure the module stays registered.
+
+Note for Windows users: helper scripts in `scripts/` are Bash-based. Use Git Bash or WSL, or run the equivalent Gradle/Compose commands directly.
 
 ---
 
